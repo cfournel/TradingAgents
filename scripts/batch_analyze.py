@@ -106,6 +106,8 @@ def analyze_one(
         "sentiment_score": summary["sentiment_score"],
         "price_target": summary["price_target"],
         "time_horizon": summary["time_horizon"],
+        "entry_price": summary["entry_price"],
+        "stop_loss": summary["stop_loss"],
         "report": report_markdown,
     }
 

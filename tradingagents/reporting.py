@@ -22,6 +22,9 @@ _SENTIMENT_HEADER_RE = re.compile(
 # "**Price Target**: 215.5" / "**Time Horizon**: 3-6 months".
 _PRICE_TARGET_RE = re.compile(r"\*\*Price Target\*\*:\s*([^\n]+)")
 _TIME_HORIZON_RE = re.compile(r"\*\*Time Horizon\*\*:\s*([^\n]+)")
+# render_trader_proposal()'s level lines, e.g. "**Entry Price**: 20.69" / "**Stop Loss**: 19.07".
+_ENTRY_PRICE_RE = re.compile(r"\*\*Entry Price\*\*:\s*\$?([\d,]+(?:\.\d+)?)")
+_STOP_LOSS_RE = re.compile(r"\*\*Stop Loss\*\*:\s*\$?([\d,]+(?:\.\d+)?)")
 
 
 def extract_screen_summary(final_state: dict) -> dict[str, Any]:
@@ -43,6 +46,8 @@ def extract_screen_summary(final_state: dict) -> dict[str, Any]:
         "sentiment_score": None,
         "price_target": None,
         "time_horizon": None,
+        "entry_price": None,
+        "stop_loss": None,
     }
     if not isinstance(final_state, dict):
         return empty
@@ -64,8 +69,14 @@ def extract_screen_summary(final_state: dict) -> dict[str, Any]:
     price_target_match = _PRICE_TARGET_RE.search(final_trade_decision)
     time_horizon_match = _TIME_HORIZON_RE.search(final_trade_decision)
 
+    trader_plan = final_state.get("trader_investment_plan") or ""
+    entry_match = _ENTRY_PRICE_RE.search(trader_plan)
+    stop_match = _STOP_LOSS_RE.search(trader_plan)
+
     return {
         "direction": direction,
+        "entry_price": float(entry_match.group(1).replace(",", "")) if entry_match else None,
+        "stop_loss": float(stop_match.group(1).replace(",", "")) if stop_match else None,
         "sentiment_band": sentiment_band,
         "sentiment_score": sentiment_score,
         "price_target": price_target_match.group(1).strip() if price_target_match else None,

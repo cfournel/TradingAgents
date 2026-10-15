@@ -62,12 +62,19 @@ def _save(data: dict[str, dict]) -> None:
 
 
 def size_position(price: float, atr_pct: float, horizon: str, capital: float, buying_power: float,
-                  risk_per_trade: float = 0.02, max_position_pct: float = 0.25) -> dict[str, float] | None:
-    """Notional and stop for one trade, or None when it cannot be sized."""
+                  risk_per_trade: float = 0.02, max_position_pct: float = 0.25,
+                  analysis_stop: float | None = None) -> dict[str, float] | None:
+    """Notional and stop for one trade, or None when it cannot be sized.
+
+    ``analysis_stop`` (the trader agent's stop level) replaces the ATR stop when it is a sane distance
+    below ``price`` (3% to 20%).
+    """
     if price <= 0 or capital <= 0:
         return None
     k = 2.0 if horizon == "swing" else 3.0
     stop_pct = max(k * atr_pct, 0.05)
+    if analysis_stop and 0.03 <= 1 - analysis_stop / price <= 0.20:
+        stop_pct = 1 - analysis_stop / price
     notional = min(capital * risk_per_trade / stop_pct, capital * max_position_pct, buying_power)
     if notional < 1.0:
         # Alpaca's minimum order is $1. On a tiny account the exact size can fall just under it;
@@ -108,8 +115,11 @@ def propose(results: list[dict], candidates: dict[str, dict] | None = None, capi
         metrics = (candidates or {}).get(ticker, {}).get("metrics", {})
         if not price:
             continue
-        sizing = size_position(price, metrics.get("atr_pct", 0.04), r.get("horizon") or "swing",
-                               capital, min(bp, capital), risk_per_trade, max_position_pct)
+        # The trader's entry level is a pullback when it sits clearly below the market; wait for it.
+        entry = r.get("entry_price")
+        pullback = entry if isinstance(entry, (int, float)) and 0.8 * price <= entry <= 0.995 * price else None
+        sizing = size_position(pullback or price, metrics.get("atr_pct", 0.04), r.get("horizon") or "swing",
+                               capital, min(bp, capital), risk_per_trade, max_position_pct, r.get("stop_loss"))
         if not sizing:
             continue
         pid = uuid.uuid4().hex[:8]
@@ -119,6 +129,8 @@ def propose(results: list[dict], candidates: dict[str, dict] | None = None, capi
             "price_target": r.get("price_target"), "time_horizon": r.get("time_horizon"),
             "paper": _paper(), **sizing,
         }
+        if pullback:
+            stored[pid]["entry_limit"] = pullback
         out.append(stored[pid])
         open_slots -= 1
     _save(stored)
@@ -146,8 +158,20 @@ def execute(proposal_id: str) -> dict:
     return p
 
 
+def _target(p: dict) -> float | None:
+    """The proposal's price target as a number, only when it is a plausible gain over the entry."""
+    try:
+        t = float(str(p.get("price_target")).replace("$", "").replace(",", ""))
+    except ValueError:
+        return None
+    return t if t > p["entry_price"] * 1.02 else None
+
+
 def check_stops(close: bool = False) -> list[dict]:
-    """Submitted proposals whose position broke the stop; closes them only when ``close`` is true."""
+    """Submitted proposals whose position broke the stop or reached the target.
+
+    Each hit carries ``reason`` ("stop" or "target"); positions are closed only when ``close`` is true.
+    """
     if close:
         _require_paper()
     stored = _load()
@@ -158,16 +182,24 @@ def check_stops(close: bool = False) -> list[dict]:
         if p["status"] != "submitted" or not cur:
             continue
         price = float(cur["current_price"])
+        target = _target(p)
         if price <= p["stop_price"]:
-            hit = {**p, "current_price": price}
-            if close:
-                r = requests.delete(f"{_base()}/v2/positions/{p['ticker']}", headers=_credentials(), timeout=30)
-                hit["closed"] = r.status_code < 300
-                if hit["closed"]:
-                    p["status"] = "stopped"
-                    notify(f"[trading] STOP {p['ticker']}",
-                           f"Position {p['ticker']} fermée (paper) : prix {price} <= stop {p['stop_price']}.")
-            hits.append(hit)
+            reason = "stop"
+        elif target and price >= target:
+            reason = "target"
+        else:
+            continue
+        hit = {**p, "current_price": price, "reason": reason}
+        if close:
+            r = requests.delete(f"{_base()}/v2/positions/{p['ticker']}", headers=_credentials(), timeout=30)
+            hit["closed"] = r.status_code < 300
+            if hit["closed"]:
+                p["status"] = "stopped" if reason == "stop" else "target_hit"
+                level = p["stop_price"] if reason == "stop" else target
+                notify(f"[trading] {'STOP' if reason == 'stop' else 'OBJECTIF'} {p['ticker']}",
+                       f"Position {p['ticker']} fermée (paper) : prix {price}, "
+                       f"{'stop' if reason == 'stop' else 'objectif'} {level}.")
+        hits.append(hit)
     if close:
         _save(stored)
     return hits

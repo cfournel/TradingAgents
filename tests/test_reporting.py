@@ -93,7 +93,19 @@ def test_extract_screen_summary_missing_fields_are_none():
         "sentiment_score": None,
         "price_target": None,
         "time_horizon": None,
+        "entry_price": None,
+        "stop_loss": None,
     }
+
+
+@pytest.mark.unit
+def test_extract_screen_summary_reads_the_trader_levels():
+    plan = "**Action**: Buy\n\n**Entry Price**: 20.69\n\n**Stop Loss**: $1,019.5\n\n**Position Sizing**: not provided"
+    summary = extract_screen_summary({"trader_investment_plan": plan})
+    assert summary["entry_price"] == 20.69
+    assert summary["stop_loss"] == 1019.5
+    assert extract_screen_summary({"trader_investment_plan": "**Entry Price**: not provided"})["entry_price"] is None
+
 
 @pytest.mark.unit
 def test_the_report_names_the_analysis_date_and_what_produced_it(tmp_path):
