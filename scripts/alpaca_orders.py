@@ -5,6 +5,8 @@
     list     [--status proposed|submitted|stopped]
     account                                                   equity, cash, open positions
     execute  ID                                               send ONE stored proposal (explicit confirmation)
+    entry-limit ID PRICE                                      wait for a pullback before sending that proposal
+    fill                                                      paper only: send proposals whose entry level is reached
     track                                                     log equity, print P&L since the first log
     stops    [--close]                                        report (or close) positions that broke their stop
 """
@@ -33,6 +35,10 @@ def main() -> int:
     sub.add_parser("account")
     ex = sub.add_parser("execute")
     ex.add_argument("id")
+    el = sub.add_parser("entry-limit")
+    el.add_argument("id")
+    el.add_argument("price", type=float)
+    sub.add_parser("fill")
     sub.add_parser("track")
     st = sub.add_parser("stops")
     st.add_argument("--close", action="store_true")
@@ -55,6 +61,10 @@ def main() -> int:
                        for p in ao.positions()]}
         elif a.cmd == "execute":
             out = ao.execute(a.id)
+        elif a.cmd == "entry-limit":
+            out = ao.set_entry_limit(a.id, a.price)
+        elif a.cmd == "fill":
+            out = ao.fill_entries()
         elif a.cmd == "track":
             out = ao.track()
         else:

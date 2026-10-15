@@ -147,6 +147,8 @@ def execute(proposal_id: str) -> dict:
 
 def check_stops(close: bool = False) -> list[dict]:
     """Submitted proposals whose position broke the stop; closes them only when ``close`` is true."""
+    if close:
+        _require_paper()
     stored = _load()
     pos = {p["symbol"]: p for p in positions()}
     hits = []
@@ -193,3 +195,49 @@ def track() -> dict[str, Any]:
         "positions": [{"symbol": p["symbol"], "unrealized_plpc": p["unrealized_plpc"], "market_value": p["market_value"]}
                       for p in positions()],
     }
+
+
+def _require_paper() -> None:
+    if not _paper():
+        raise RuntimeError("automatic execution is allowed in paper mode only (ALPACA_PAPER_TRADE=true)")
+
+
+def market_open() -> bool:
+    return bool(_get(f"{_base()}/v2/clock", _credentials()).get("is_open"))
+
+
+def set_entry_limit(proposal_id: str, price: float) -> dict:
+    """Wait for a pullback: the proposal is only sent once the price is at or below ``price``."""
+    stored = _load()
+    p = stored[proposal_id]
+    if p["status"] != "proposed":
+        raise ValueError(f"proposal {proposal_id} is {p['status']}, not 'proposed'")
+    p["entry_limit"] = float(price)
+    _save(stored)
+    return p
+
+
+def fill_entries(max_age_days: float = 10) -> list[dict]:
+    """Paper only: send proposals whose entry level is reached (or that have no entry limit).
+
+    Does nothing while the market is closed. Proposals older than ``max_age_days`` expire.
+    """
+    _require_paper()
+    if not market_open():
+        return []
+    now, sent = time.time(), []
+    for p in list(_load().values()):
+        if p["status"] != "proposed":
+            continue
+        if now - p["created_at"] > max_age_days * 86400:
+            stored = _load()
+            stored[p["id"]]["status"] = "expired"
+            _save(stored)
+            continue
+        limit = p.get("entry_limit")
+        if limit is not None:
+            price = _latest(p["ticker"])
+            if not price or price > limit:
+                continue
+        sent.append(execute(p["id"]))
+    return sent
