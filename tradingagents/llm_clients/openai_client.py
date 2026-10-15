@@ -67,6 +67,17 @@ class LocalCompatibleChatOpenAI(NormalizedChatOpenAI):
             kwargs.setdefault("tool_choice", None)
         return super().with_structured_output(schema, method=method, **kwargs)
 
+    def _get_request_payload(self, input_, *, stop=None, **kwargs):
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        # Thinking models served by llama.cpp (Qwen3.x...) spend the whole token
+        # budget reasoning and return an empty reply, so the structured parse
+        # fails. TRADINGAGENTS_LOCAL_THINKING=false asks the chat template to
+        # skip the thinking phase.
+        if os.environ.get("TRADINGAGENTS_LOCAL_THINKING", "").strip().lower() in ("0", "false", "no", "off"):
+            extra_body = payload.setdefault("extra_body", {})
+            extra_body.setdefault("chat_template_kwargs", {"enable_thinking": False})
+        return payload
+
 
 def _input_to_messages(input_: Any) -> list:
     """Normalise a langchain LLM input to a list of message objects.
