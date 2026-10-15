@@ -23,7 +23,7 @@ from datetime import date
 from pathlib import Path
 
 from cli.models import AnalystType
-from cli.utils import detect_asset_type, filter_analysts_for_asset_type
+from cli.prompts import detect_asset_type, filter_analysts_for_asset_type
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.reporting import extract_screen_summary, write_report_tree
