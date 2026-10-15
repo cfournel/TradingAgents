@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Comma-separated asset classes: stock,crypto,commodity",
     )
-    parser.add_argument("--risk", required=True, choices=["low", "medium", "high"])
+    parser.add_argument("--risk", required=True, choices=["low", "medium", "high", "any"])
     parser.add_argument("--horizon", required=True, choices=["swing", "position"])
     parser.add_argument("--limit", type=int, default=20, help="Max candidates per asset class")
     parser.add_argument(
@@ -39,6 +39,9 @@ def parse_args() -> argparse.Namespace:
         choices=["all", "pennies", "5_50", "51_100", "101_300", "301_plus"],
         help="Price filter: all, pennies (<$5), 5_50, 51_100, 101_300, or 301_plus. Default: all.",
     )
+    parser.add_argument("--min-price", type=float, help="Stocks via Alpaca: exact lower price bound (overrides --price-range)")
+    parser.add_argument("--max-price", type=float, help="Stocks via Alpaca: exact upper price bound (overrides --price-range)")
+    parser.add_argument("--min-dollar-volume", type=float, default=5_000_000, help="Stocks via Alpaca: min 20d average dollar volume")
     return parser.parse_args()
 
 
@@ -47,6 +50,17 @@ def main() -> int:
     asset_classes = [a.strip() for a in args.asset_classes.split(",") if a.strip()]
 
     try:
+        if args.min_price is not None or args.max_price is not None or args.risk == "any":
+            from tradingagents.dataflows.alpaca_screener import screen_alpaca
+
+            candidates = screen_alpaca(
+                risk=args.risk, horizon=args.horizon, limit=args.limit,
+                min_price=args.min_price if args.min_price is not None else 2.0,
+                max_price=args.max_price if args.max_price is not None else 1000.0,
+                min_dollar_volume=args.min_dollar_volume,
+            )
+            print(json.dumps({"candidates": candidates}, default=str))
+            return 0
         candidates = discover(asset_classes, args.risk, args.horizon, args.limit, args.price_range)
     except Exception as exc:  # noqa: BLE001 — report as JSON, not a traceback
         print(json.dumps({"candidates": [], "error": f"{type(exc).__name__}: {exc}"}))

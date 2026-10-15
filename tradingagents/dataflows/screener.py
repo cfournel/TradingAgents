@@ -265,6 +265,27 @@ def screen_commodities(
     return scored[:limit] if scored else []
 
 
+_ALPACA_PRICE_BOUNDS = {"all": (2.0, 1000.0), "pennies": (0.5, 5.0), "5_50": (5.0, 50.0),
+                        "51_100": (51.0, 100.0), "101_300": (101.0, 300.0), "301_plus": (301.0, 10000.0)}
+
+
+def _screen_stocks(risk: str, horizon: str, limit: int, price_range: str) -> list[dict[str, Any]]:
+    """Alpaca-tradable stock screen when credentials exist, else the Yahoo screener."""
+    try:
+        from tradingagents.dataflows.alpaca_screener import _credentials, screen_alpaca
+
+        _credentials()
+    except Exception as exc:  # noqa: BLE001 — no credentials / import problem: use Yahoo
+        logger.info("alpaca screen unavailable (%s); using the Yahoo screener", exc)
+        return screen_equities(risk, horizon, limit, price_range)
+    lo, hi = _ALPACA_PRICE_BOUNDS[price_range]
+    try:
+        return screen_alpaca(risk=risk, horizon=horizon, limit=limit, min_price=lo, max_price=hi)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("alpaca screen failed (%s); using the Yahoo screener", exc)
+        return screen_equities(risk, horizon, limit, price_range)
+
+
 def discover(
     asset_classes: list[str],
     risk: str,
@@ -291,7 +312,7 @@ def discover(
     results: list[dict[str, Any]] = []
     for asset_class in asset_classes:
         if asset_class == "stock":
-            results.extend(screen_equities(risk, horizon, limit, price_range))
+            results.extend(_screen_stocks(risk, horizon, limit, price_range))
         elif asset_class == "crypto":
             results.extend(screen_crypto(risk, horizon, limit, price_range))
         elif asset_class == "commodity":
