@@ -68,8 +68,13 @@ def size_position(price: float, atr_pct: float, horizon: str, capital: float, bu
     k = 2.0 if horizon == "swing" else 3.0
     stop_pct = max(k * atr_pct, 0.05)
     notional = min(capital * risk_per_trade / stop_pct, capital * max_position_pct, buying_power)
-    if notional < 1.0:  # Alpaca's minimum notional order
-        return None
+    if notional < 1.0:
+        # Alpaca's minimum order is $1. On a tiny account the exact size can fall just under it;
+        # round up to the minimum only while the risk stays within twice the per-trade budget.
+        if min(capital, buying_power) >= 1.0 and 1.0 * stop_pct <= 2 * capital * risk_per_trade:
+            notional = 1.0
+        else:
+            return None
     return {
         "notional": round(notional, 2),
         "stop_price": round(price * (1 - stop_pct), 2),

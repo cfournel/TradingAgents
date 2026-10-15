@@ -25,4 +25,11 @@ def test_position_horizon_uses_a_wider_stop():
 
 @pytest.mark.unit
 def test_orders_below_the_one_dollar_minimum_are_dropped():
-    assert ao.size_position(10, 0.05, "swing", 3, 3) is None   # 2% of $3 at a 10% stop = $0.60
+    assert ao.size_position(10, 0.05, "swing", 0.8, 0.8) is None   # less than the $1 minimum is available
+
+
+@pytest.mark.unit
+def test_tiny_account_rounds_up_to_the_one_dollar_minimum_within_twice_the_risk_budget():
+    s = ao.size_position(21.34, 0.0529, "swing", 5, 5)    # exact size $0.94, risk at $1 = $0.106 <= $0.20
+    assert s["notional"] == 1.0
+    assert ao.size_position(21.34, 0.0529, "swing", 1.5, 1.5) is None   # $1 would risk 7% of capital
