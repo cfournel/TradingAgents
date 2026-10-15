@@ -18,6 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from tradingagents.dataflows import alpaca_orders as ao
+from tradingagents.notify import notify
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
@@ -91,6 +92,7 @@ def main() -> int:
     # 5. Performance log.
     say("track: " + json.dumps(ao.track()))
     (OUT / f"{stamp}.log").write_text("\n".join(log) + "\n")
+    notify(f"[trading] cycle du {stamp}", "\n".join(log))
     return 0
 
 

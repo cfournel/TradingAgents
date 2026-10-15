@@ -27,6 +27,7 @@ from typing import Any
 
 import requests
 
+from tradingagents.notify import notify
 from tradingagents.dataflows.alpaca_screener import DATA_URL, TRADING_URL, _credentials, _get
 
 PROPOSALS_PATH = Path.home() / ".hermes" / "tradingagents" / "proposals.json"
@@ -164,6 +165,8 @@ def check_stops(close: bool = False) -> list[dict]:
                 hit["closed"] = r.status_code < 300
                 if hit["closed"]:
                     p["status"] = "stopped"
+                    notify(f"[trading] STOP {p['ticker']}",
+                           f"Position {p['ticker']} fermée (paper) : prix {price} <= stop {p['stop_price']}.")
             hits.append(hit)
     if close:
         _save(stored)
@@ -239,5 +242,9 @@ def fill_entries(max_age_days: float = 10) -> list[dict]:
             price = _latest(p["ticker"])
             if not price or price > limit:
                 continue
-        sent.append(execute(p["id"]))
+        done = execute(p["id"])
+        sent.append(done)
+        notify(f"[trading] ACHAT {done['ticker']}",
+               f"Ordre paper envoyé : {done['notional']} $ de {done['ticker']} (décision {done.get('decision')}, "
+               f"stop {done['stop_price']}, objectif {done.get('price_target')}).")
     return sent
