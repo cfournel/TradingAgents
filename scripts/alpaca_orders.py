@@ -5,6 +5,7 @@
     list     [--status proposed|submitted|stopped]
     account                                                   equity, cash, open positions
     execute  ID                                               send ONE stored proposal (explicit confirmation)
+    track                                                     log equity, print P&L since the first log
     stops    [--close]                                        report (or close) positions that broke their stop
 """
 
@@ -32,6 +33,7 @@ def main() -> int:
     sub.add_parser("account")
     ex = sub.add_parser("execute")
     ex.add_argument("id")
+    sub.add_parser("track")
     st = sub.add_parser("stops")
     st.add_argument("--close", action="store_true")
     a = ap.parse_args()
@@ -53,6 +55,8 @@ def main() -> int:
                        for p in ao.positions()]}
         elif a.cmd == "execute":
             out = ao.execute(a.id)
+        elif a.cmd == "track":
+            out = ao.track()
         else:
             out = ao.check_stops(a.close)
     except Exception as exc:  # noqa: BLE001 — report as JSON, not a traceback

@@ -165,3 +165,26 @@ def check_stops(close: bool = False) -> list[dict]:
 
 def list_proposals(status: str | None = None) -> list[dict[str, Any]]:
     return [p for p in _load().values() if status in (None, p["status"])]
+
+
+EQUITY_LOG = PROPOSALS_PATH.with_name("equity_log.jsonl")
+
+
+def track() -> dict[str, Any]:
+    """Log today's equity and report P&L: account vs its first logged value, and each open position.
+
+    Append one line per call to ``equity_log.jsonl`` so performance can be judged over weeks.
+    """
+    acct = account()
+    row = {"ts": int(time.time()), "equity": float(acct["equity"]), "cash": float(acct["cash"])}
+    log = [json.loads(line) for line in EQUITY_LOG.read_text().splitlines()] if EQUITY_LOG.exists() else []
+    EQUITY_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with EQUITY_LOG.open("a") as f:
+        f.write(json.dumps(row) + "\n")
+    start = log[0]["equity"] if log else row["equity"]
+    return {
+        "equity": row["equity"], "since_first_log": round(row["equity"] / start - 1, 4) if start else 0.0,
+        "logged_days": len(log) + 1,
+        "positions": [{"symbol": p["symbol"], "unrealized_plpc": p["unrealized_plpc"], "market_value": p["market_value"]}
+                      for p in positions()],
+    }
