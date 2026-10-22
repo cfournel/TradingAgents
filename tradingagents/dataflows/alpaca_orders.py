@@ -13,6 +13,11 @@ Sizing (fixed-fractional, deliberately conservative):
     capital (default 25%) and at the available buying power;
   * at most ``max_positions`` open positions.
 
+Above ``RISK_BAND_MIN_BALANCE`` ($1000 of real equity) the sizing uses the real account instead of the
+simulated capital, and the risk per trade is a band (``RISK_BAND``) picked by conviction: Overweight
+risks the low end, Buy the high end (scaled by the analysis confidence when it gives one). A cash
+reserve is kept untouched.
+
 Paper vs live follows ``ALPACA_PAPER_TRADE`` (default true). Credentials come
 from the same place as the screener.
 """
@@ -32,6 +37,18 @@ from tradingagents.dataflows.alpaca_screener import DATA_URL, TRADING_URL, _cred
 
 PROPOSALS_PATH = Path.home() / ".hermes" / "tradingagents" / "proposals.json"
 BUYABLE = {"buy", "overweight"}
+RISK_BAND_MIN_BALANCE = 1000.0
+RISK_BAND = (0.005, 0.02)  # fraction of equity risked per trade: Overweight / low confidence -> Buy / high
+CASH_RESERVE = 0.10
+
+
+def risk_for(decision: str, confidence: float | None = None) -> float:
+    """Risk per trade inside ``RISK_BAND``: Overweight at the low end, Buy at the high end, scaled by confidence."""
+    lo, hi = RISK_BAND
+    top = hi if decision.lower() == "buy" else (lo + hi) / 2
+    if confidence is None:
+        return top
+    return lo + (top - lo) * min(max(confidence, 0.0), 1.0)
 
 
 def _paper() -> bool:
@@ -101,8 +118,14 @@ def propose(results: list[dict], candidates: dict[str, dict] | None = None, capi
             max_positions: int = 5, risk_per_trade: float = 0.02, max_position_pct: float = 0.25) -> list[dict]:
     """Proposals from ``batch_analyze`` results. ``candidates`` maps ticker -> screener metrics (for ATR)."""
     acct = account()
-    capital = capital if capital is not None else float(acct["equity"])
-    bp = float(acct["buying_power"])
+    equity = float(acct["equity"])
+    banded = equity > RISK_BAND_MIN_BALANCE
+    if banded:  # real balance large enough: size on it, not on the simulated capital
+        capital = equity
+        bp = min(float(acct["buying_power"]), float(acct["cash"]) - CASH_RESERVE * equity)
+    else:
+        capital = capital if capital is not None else equity
+        bp = float(acct["buying_power"])
     held = {p["symbol"] for p in positions()}
     stored = _load()
     open_slots = max_positions - len(held)
@@ -118,8 +141,9 @@ def propose(results: list[dict], candidates: dict[str, dict] | None = None, capi
         # The trader's entry level is a pullback when it sits clearly below the market; wait for it.
         entry = r.get("entry_price")
         pullback = entry if isinstance(entry, (int, float)) and 0.8 * price <= entry <= 0.995 * price else None
+        risk = risk_for(decision, r.get("confidence")) if banded else risk_per_trade
         sizing = size_position(pullback or price, metrics.get("atr_pct", 0.04), r.get("horizon") or "swing",
-                               capital, min(bp, capital), risk_per_trade, max_position_pct, r.get("stop_loss"))
+                               capital, min(bp, capital), risk, max_position_pct, r.get("stop_loss"))
         if not sizing:
             continue
         pid = uuid.uuid4().hex[:8]
@@ -127,11 +151,12 @@ def propose(results: list[dict], candidates: dict[str, dict] | None = None, capi
             "id": pid, "ticker": ticker, "side": "buy", "status": "proposed", "created_at": int(time.time()),
             "decision": r.get("decision"), "horizon": r.get("horizon"), "entry_price": price,
             "price_target": r.get("price_target"), "time_horizon": r.get("time_horizon"),
-            "paper": _paper(), **sizing,
+            "paper": _paper(), "risk_per_trade": risk, **sizing,
         }
         if pullback:
             stored[pid]["entry_limit"] = pullback
         out.append(stored[pid])
+        bp -= sizing["notional"]
         open_slots -= 1
     _save(stored)
     return out

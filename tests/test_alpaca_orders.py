@@ -73,3 +73,12 @@ def test_a_pullback_entry_becomes_a_limit_and_a_target_hit_closes_the_position(m
     (hit,) = ao.check_stops(close=True)
     assert hit["reason"] == "target" and closed
     assert ao._load()[p["id"]]["status"] == "target_hit"
+
+
+def test_risk_band_by_conviction():
+    from tradingagents.dataflows.alpaca_orders import RISK_BAND, risk_for
+
+    lo, hi = RISK_BAND
+    assert risk_for("Buy") == hi
+    assert risk_for("Overweight") == (lo + hi) / 2
+    assert risk_for("Buy", 0.0) == lo

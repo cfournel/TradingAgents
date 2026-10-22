@@ -95,6 +95,7 @@ def test_extract_screen_summary_missing_fields_are_none():
         "time_horizon": None,
         "entry_price": None,
         "stop_loss": None,
+        "confidence": None,
     }
 
 

@@ -20,6 +20,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS":    "max_debate_rounds",
     "TRADINGAGENTS_MAX_RISK_ROUNDS":      "max_risk_discuss_rounds",
     "TRADINGAGENTS_MAX_TOOL_ROUNDS":      "max_tool_rounds",
+    "TRADINGAGENTS_DECISION_ONLY":        "decision_only",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
@@ -133,6 +134,9 @@ def build_default_config() -> dict:
         "max_debate_rounds": 1,
         "max_risk_discuss_rounds": 1,
         "max_recur_limit": 100,
+        # Decision-only run: no bull/bear debate or Research Manager (analysts feed the Trader directly);
+        # the risk debate stays, and the Portfolio Manager returns just the rating and levels, no write-up.
+        "decision_only": False,
         # Rounds of tool calls an analyst may make before it is asked for its report.
         "max_tool_rounds": 20,
         # News / data fetching parameters

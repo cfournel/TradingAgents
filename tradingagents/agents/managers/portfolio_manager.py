@@ -17,12 +17,19 @@ from tradingagents.agents.context import (
     get_portfolio_context_from_state,
 )
 from tradingagents.agents.rating import parse_rating
-from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
+from tradingagents.agents.schemas import (
+    PortfolioDecision,
+    PortfolioDecisionLite,
+    render_pm_decision,
+    render_pm_decision_lite,
+)
 from tradingagents.agents.structured import NO_EXTERNAL_TOOLS, bind_structured, invoke_structured
 
 
-def create_portfolio_manager(llm):
-    structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
+def create_portfolio_manager(llm, decision_only: bool = False):
+    schema = PortfolioDecisionLite if decision_only else PortfolioDecision
+    render = render_pm_decision_lite if decision_only else render_pm_decision
+    structured_llm = bind_structured(llm, schema, "Portfolio Manager")
 
     def portfolio_manager_node(state) -> dict:
         instrument_context = get_instrument_context_from_state(state)
@@ -30,7 +37,7 @@ def create_portfolio_manager(llm):
 
         history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
-        research_plan = state["investment_plan"]
+        research_plan = state.get("investment_plan") or "none (decision-only run)"
         trader_plan = state["trader_investment_plan"]
 
         past_context = state.get("past_context", "")
@@ -67,7 +74,7 @@ def create_portfolio_manager(llm):
 Ground every conclusion in specific evidence from the analysts. The risk debate always contains conflicting stances; deciding which is stronger is the job, so conflict alone is not a reason to Hold. Commit to the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not force a direction to appear decisive. Weigh the analysts on their merits, independent of speaking order.{get_horizon_instruction(state)}
 
 ## Output
-
+{"Return only the rating, confidence, price target and time horizon. No summary, no justification." if decision_only else ""}
 Write these sections, in this order, starting with the rating on its own line:
 
 - **Rating**: exactly one of Buy / Overweight / Hold / Underweight / Sell
@@ -80,7 +87,7 @@ Write these sections, in this order, starting with the rating on its own line:
         # Read back from text, a rating the thesis quotes could replace it.
         decision = invoke_structured(structured_llm, prompt, "Portfolio Manager")
         if decision is not None:
-            final_trade_decision = render_pm_decision(decision)
+            final_trade_decision = render(decision)
             final_rating = decision.rating.value
         else:
             final_trade_decision = llm.invoke(prompt).content

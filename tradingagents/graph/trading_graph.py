@@ -98,6 +98,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.conditional_logic,
             max_tool_rounds,
+            bool(self.config.get("decision_only")),
         )
 
         self.propagator = Propagator(
@@ -152,6 +153,7 @@ class TradingAgentsGraph:
         return "|".join([
             "analysts=" + ",".join(self.selected_analysts),
             f"debate={self.config['max_debate_rounds']}",
+            f"decision_only={bool(self.config.get('decision_only'))}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",
             # A horizon change flips the research/trader/PM prompts.
@@ -467,7 +469,7 @@ class TradingAgentsGraph:
                 "neutral_history": final_state["risk_debate_state"]["neutral_history"],
                 "history": final_state["risk_debate_state"]["history"],
             },
-            "investment_plan": final_state["investment_plan"],
+            "investment_plan": final_state.get("investment_plan", ""),
             "final_trade_decision": final_state["final_trade_decision"],
             "final_rating": run_rating(final_state),
             "run_settings": self.run_settings(),

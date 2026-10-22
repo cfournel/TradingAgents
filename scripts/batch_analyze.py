@@ -61,16 +61,29 @@ def parse_args() -> argparse.Namespace:
             "final decision, e.g. the screener's shortlist deep-dive."
         ),
     )
+    parser.add_argument(
+        "--decision-only",
+        action="store_true",
+        help=(
+            "Fast run for an automated caller: market + news analysts feed the Trader directly (no "
+            "bull/bear debate, no Research Manager), the risk debate stays, and the output is a compact "
+            "JSON (decision, confidence, entry, stop, target, horizon) without the report."
+        ),
+    )
     parser.add_argument("--debug", action="store_true")
     return parser.parse_args()
 
 
 def analyze_one(
     ticker: str, trade_date: str, debug: bool, horizon: str = "position", quick: bool = False,
+    decision_only: bool = False,
 ) -> dict:
     asset_type = detect_asset_type(ticker)
     analysts = filter_analysts_for_asset_type(list(AnalystType), asset_type)
     config = DEFAULT_CONFIG.copy()
+    if decision_only:
+        config["decision_only"] = True
+        analysts = [a for a in analysts if a.value in ("market", "news")]
     if quick:
         config["deep_think_llm"] = config["quick_think_llm"]
     graph = TradingAgentsGraph(
@@ -82,6 +95,14 @@ def analyze_one(
         ticker, trade_date, asset_type=asset_type.value, horizon=horizon,
     )
     summary = extract_screen_summary(final_state)
+
+    if decision_only:
+        return {
+            "ticker": ticker, "date": trade_date, "asset_type": asset_type.value, "horizon": horizon,
+            "mode": "decision_only", "decision": decision, "confidence": summary["confidence"],
+            "entry_price": summary["entry_price"], "stop_loss": summary["stop_loss"],
+            "price_target": summary["price_target"], "time_horizon": summary["time_horizon"],
+        }
 
     # Render the same consolidated markdown report the interactive CLI
     # writes to disk, so callers get more than the one-line decision
@@ -123,7 +144,7 @@ def main() -> int:
     results = []
     for ticker in tickers:
         try:
-            results.append(analyze_one(ticker, trade_date, args.debug, args.horizon, args.quick))
+            results.append(analyze_one(ticker, trade_date, args.debug, args.horizon, args.quick, args.decision_only))
         except Exception as exc:  # noqa: BLE001 - batch must not die on one bad ticker
             results.append(
                 {"ticker": ticker, "date": trade_date, "error": f"{type(exc).__name__}: {exc}"}

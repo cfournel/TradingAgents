@@ -20,6 +20,7 @@ _SENTIMENT_HEADER_RE = re.compile(
 )
 # Matches render_pm_decision()'s optional lines, e.g.
 # "**Price Target**: 215.5" / "**Time Horizon**: 3-6 months".
+_CONFIDENCE_RE = re.compile(r"\*\*Confidence\*\*:\s*([\d.]+)")
 _PRICE_TARGET_RE = re.compile(r"\*\*Price Target\*\*:\s*([^\n]+)")
 _TIME_HORIZON_RE = re.compile(r"\*\*Time Horizon\*\*:\s*([^\n]+)")
 # render_trader_proposal()'s level lines, e.g. "**Entry Price**: 20.69" / "**Stop Loss**: 19.07".
@@ -48,6 +49,7 @@ def extract_screen_summary(final_state: dict) -> dict[str, Any]:
         "time_horizon": None,
         "entry_price": None,
         "stop_loss": None,
+        "confidence": None,
     }
     if not isinstance(final_state, dict):
         return empty
@@ -73,8 +75,11 @@ def extract_screen_summary(final_state: dict) -> dict[str, Any]:
     entry_match = _ENTRY_PRICE_RE.search(trader_plan)
     stop_match = _STOP_LOSS_RE.search(trader_plan)
 
+    confidence_match = _CONFIDENCE_RE.search(final_trade_decision)
+
     return {
         "direction": direction,
+        "confidence": float(confidence_match.group(1)) if confidence_match else None,
         "entry_price": float(entry_match.group(1).replace(",", "")) if entry_match else None,
         "stop_loss": float(stop_match.group(1).replace(",", "")) if stop_match else None,
         "sentiment_band": sentiment_band,

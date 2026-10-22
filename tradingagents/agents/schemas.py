@@ -265,6 +265,32 @@ class PortfolioDecision(BaseModel):
         return _coerce_optional_float(v)
 
 
+class PortfolioDecisionLite(BaseModel):
+    """Decision-only output of the Portfolio Manager: the rating and levels, no write-up."""
+
+    rating: PortfolioRating = Field(
+        description="Exactly one of Buy / Overweight / Hold / Underweight / Sell.")
+    confidence: float | None = Field(default=None, description="Conviction from 0 to 1.")
+    price_target: float | None = Field(default=None, description="Optional target price.")
+    time_horizon: str | None = Field(default=None, description="Optional holding period, e.g. '5-10 days'.")
+
+    @field_validator("price_target", "confidence", mode="before")
+    @classmethod
+    def _nullish_float_to_none(cls, v):
+        return _coerce_optional_float(v)
+
+
+def render_pm_decision_lite(decision: PortfolioDecisionLite) -> str:
+    """Same ``**Label**: value`` lines the report parsers read, without summary or thesis."""
+    conf = decision.confidence if decision.confidence is not None else "not provided"
+    return "\n".join([
+        f"**Rating**: {decision.rating.value}", "",
+        f"**Confidence**: {conf}", "",
+        f"**Price Target**: {decision.price_target if decision.price_target is not None else 'not provided'}", "",
+        f"**Time Horizon**: {decision.time_horizon or 'not provided'}",
+    ])
+
+
 def render_pm_decision(decision: PortfolioDecision) -> str:
     """Render a PortfolioDecision back to the markdown shape the rest of the system expects.
 
