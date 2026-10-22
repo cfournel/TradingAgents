@@ -41,7 +41,7 @@ def main() -> int:
     ap.add_argument("--hand", type=int, default=5, help="buy-rated names to keep in hand (positions + waiting proposals)")
     ap.add_argument("--max-analyses", type=int, default=15, help="cap on analyses per cycle")
     ap.add_argument("--budget-hours", type=float, default=4.0, help="stop starting new analyses after this long")
-    ap.add_argument("--full", action="store_true", help="full multi-agent analysis instead of the decision-only run")
+    ap.add_argument("--decision-only", action="store_true", help="fast decision-only run (off: entry/stop levels not reliable yet)")
     ap.add_argument("--risk", default="medium", choices=["low", "medium", "high", "any"])
     ap.add_argument("--min-price", default="2")
     ap.add_argument("--max-price", default="50")
@@ -89,10 +89,10 @@ def main() -> int:
                 break
             tried.add(ticker)
             analysed += 1
-            # 3. Decide: decision-only run by default; --full runs the whole agent graph (~10 min per ticker).
+            # 3. Analyse: the whole agent graph (~10 min per ticker); --decision-only opts into the fast run.
             try:
                 analysis = run("scripts/batch_analyze.py", "--tickers", ticker, "--horizon", "swing",
-                               "--quick" if a.full else "--decision-only", "--date", date.today().isoformat(), timeout=2 * 3600)
+                               "--decision-only" if a.decision_only else "--quick", "--date", date.today().isoformat(), timeout=2 * 3600)
             except (RuntimeError, subprocess.TimeoutExpired) as exc:
                 history[ticker] = time.time()
                 say(f"analysis {ticker} failed: {exc}")
